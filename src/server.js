@@ -19,17 +19,6 @@ app.use(express.json());
 app.use("/notifications", notificationRoutes);
 app.use("/rules", ruleRoutes);
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log("MongoDB Connected"))
-  .catch(err => console.error("MongoDB Error:", err));
-
-// Background Scheduler
-setInterval(() => {
-  console.log("🔄 Checking LATER queue...");
-  processLaterQueue();
-}, 30000);
-
 // Health Endpoint
 app.get("/health", (req, res) => {
   const aiStatus = getAIHealthStatus();
@@ -44,6 +33,27 @@ app.get("/health", (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Connect to MongoDB FIRST
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => {
+    console.log("MongoDB Connected");
+
+    // Start background scheduler ONLY AFTER DB connects
+    setInterval(async () => {
+      try {
+        console.log("🔄 Checking LATER queue...");
+        await processLaterQueue();
+      } catch (err) {
+        console.error("Scheduler error:", err.message);
+      }
+    }, 30000);
+
+    // Start server only after DB is ready
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+
+  })
+  .catch(err => {
+    console.error("MongoDB Connection Error:", err);
+  });
